@@ -1,0 +1,13 @@
+{
+  "id": "8857863877605931198",
+  "monitor_id": "333686875",
+  "title": "[Triggered] [Paymas] Customers marked delinquent",
+  "transition": "Triggered",
+  "status": "",
+  "query": "logs(\"service:paymas-checkout @event:marked_delinquent\").index(\"*\").rollup(\"count\").last(\"5m\") > 3",
+  "cycle_key": "8857863873991649989",
+  "tags": "monitor,service:paymas-checkout,team:payments",
+  "date": "1792232635000",
+  "link": "https://app.datadoghq.com/event/event?id=8857863877605931198",
+  "message": "%%%\nPaymas incident: marked_delinquent spiking on service paymas-checkout.\nCount in last 5 min: 8.0\n@webhook-paymas-responder \n\nMore than **3** log events matched in the last **5m** against the monitored query: **[`service:paymas-checkout \\@event:marked_delinquent`](https://app.datadoghq.com/logs?query=service%3Apaymas-checkout+%40event%3Amarked_delinquent&agg_m=count&agg_t=count&index=%2A)**\n\nThe monitor was last triggered at Sat Oct 17 2026 10:23:55 UTC.\n\n- - -\n\n[[Monitor Status](https://app.datadoghq.com/monitors/333686875?from_ts=1792231735000&to_ts=1792232935000&event_id=8857863877605931198&link_source=monitor_notif&link_monitor_id=333686875&link_event_id=8857863877605931198&link_event_ts=1792232635)] · [[Edit Monitor](https://app.datadoghq.com/monitors/333686875/edit?link_source=monitor_notif&link_monitor_id=333686875&link_event_id=8857863877605931198&link_event_ts=1792232635)] · [[Related Logs](https://app.datadoghq.com/logs?query=service%3Apaymas-checkout+%40event%3Amarked_delinquent&from_ts=1792232335000&to_ts=1792232635000&live=false&agg_m=count&agg_t=count&index=%2A&link_source=monitor_notif&link_monitor_id=333686875&link_event_id=8857863877605931198&link_event_ts=1792232635)]\n%%%"
+}
