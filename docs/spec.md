@@ -11,7 +11,9 @@
   - evidence.json — evidence bundle (stage 2)
   - triage.json — triage result (stage 3)
   - decision.json — gate decision (stage 4)
-- incident.json status: received → evidence → triage → decided → (fixing → verified | handed_to_human) → reported, or failed.
+  - fix.json — fix result (stage 5), only after the gate allows a fix
+- incident.json status: received → evidence → triage → decided → (needs_human | fixing → pr_opened | needs_human) → reported, or failed. verified and handed_to_human remain for later stages.
+- incident.json keeps agent_id (set as soon as a fix agent is created, before the prompt is sent) and run_id (set as soon as the fix run starts). Status updates must keep those fields.
 
 ## services.yaml
 Maps a service tag to its repository:
@@ -87,3 +89,24 @@ Checks, all must pass to allow:
 6. no file in the real diff is under a protected path
 7. service is not in protected_services
 Any missing input or error → block.
+
+## Fix result (fix.json)
+Written only after the gate allows a fix and a cloud run has been sent.
+A blocked gate writes no fix.json; incident status becomes `needs_human` and the pipeline stops.
+```json
+{
+  "agent_id": "bc-...",
+  "run_id": "run-...",
+  "status": "finished",
+  "pr_url": "https://github.com/ccdaniele/paymas-checkout/pull/1",
+  "branch": "cursor/fix-...",
+  "duration_ms": 74000,
+  "cost_usd": 0.42
+}
+```
+- `status` is the run status: `finished`, `error`, or `cancelled`.
+- `pr_url` and `branch` come from the run's git metadata. Both are null when no pull request was opened. `run_id` is null when the run never started.
+- `duration_ms` is the run duration.
+- `cost_usd` is the charged dollar cost from `agent.getUsage()` for that run. Cost can lag the run, so the stage retries for about 30 seconds. Null when cost is still unavailable. `0` is a real charge (plan-included or credit usage), not a missing value.
+- Incident status becomes `pr_opened` only when the run status is `finished` and `pr_url` is present. A timeout (15 minutes, then cancel), any other run status, or a finished run with no pull request URL sets `needs_human`.
+- The cloud agent is `composer-2.5`, started from the service branch in services.yaml, with `autoCreatePR` and metadata `incident_id` and `service`.

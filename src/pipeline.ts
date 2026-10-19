@@ -4,6 +4,7 @@ import { parse } from "yaml";
 import { collectEvidence, evidenceSummary } from "./evidence/collect.js";
 import { evaluateGate, type GateDecision } from "./gate/gate.js";
 import { readIncidentJson, updateIncidentStatus, writeIncidentJson } from "./incidents/store.js";
+import { runFix } from "./fix/run.js";
 import { runTriage } from "./triage/run.js";
 
 export async function runPipeline(incidentId: string): Promise<void> {
@@ -24,6 +25,8 @@ export async function runPipeline(incidentId: string): Promise<void> {
   await writeIncidentJson(incidentId, "decision.json", decision);
   logGate(incidentId, decision);
   await updateIncidentStatus(incidentId, "decided", "gate complete");
+
+  await runFix(incidentId);
 }
 
 async function readTriage(incidentId: string): Promise<unknown> {
