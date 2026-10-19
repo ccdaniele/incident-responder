@@ -1,13 +1,13 @@
 {
-  "id": "8857874171517302468",
+  "id": "8860608202878596421",
   "monitor_id": "333686229",
   "title": "[Triggered] [Paymas] Purchase failures spike",
   "transition": "Triggered",
   "status": "",
   "query": "logs(\"service:paymas-checkout @event:purchase_failed status:error\").index(\"*\").rollup(\"count\").last(\"5m\") > 5",
-  "cycle_key": "8857874166884323663",
+  "cycle_key": "8860608197136735952",
   "tags": "monitor,service:paymas-checkout,team:payments",
-  "date": "1792233249000",
-  "link": "https://app.datadoghq.com/event/event?id=8857874171517302468",
-  "message": "%%%\nPaymas incident: purchase_failed spiking on service paymas-checkout.\nCount in last 5 min: 10.0\n@webhook-paymas-responder \n\nMore than **5** log events matched in the last **5m** against the monitored query: **[`service:paymas-checkout \\@event:purchase_failed status:error`](https://app.datadoghq.com/logs?query=service%3Apaymas-checkout+%40event%3Apurchase_failed+status%3Aerror&agg_m=count&agg_t=count&index=%2A)**\n\nThe monitor was last triggered at Sat Oct 17 2026 10:34:09 UTC.\n\n- - -\n\n[[Monitor Status](https://app.datadoghq.com/monitors/333686229?from_ts=1792232349000&to_ts=1792233549000&event_id=8857874171517302468&link_source=monitor_notif&link_monitor_id=333686229&link_event_id=8857874171517302468&link_event_ts=1792233249)] · [[Edit Monitor](https://app.datadoghq.com/monitors/333686229/edit?link_source=monitor_notif&link_monitor_id=333686229&link_event_id=8857874171517302468&link_event_ts=1792233249)] · [[Related Logs](https://app.datadoghq.com/logs?query=service%3Apaymas-checkout+%40event%3Apurchase_failed+status%3Aerror&from_ts=1792232949000&to_ts=1792233249000&live=false&agg_m=count&agg_t=count&index=%2A&link_source=monitor_notif&link_monitor_id=333686229&link_event_id=8857874171517302468&link_event_ts=1792233249)]\n%%%"
+  "date": "1792396209000",
+  "link": "https://app.datadoghq.com/event/event?id=8860608202878596421",
+  "message": "%%%\nPaymas incident: purchase_failed spiking on service paymas-checkout.\nCount in last 5 min: 7.0\n@webhook-paymas-responder \n\nMore than **5** log events matched in the last **5m** against the monitored query: **[`service:paymas-checkout \\@event:purchase_failed status:error`](https://app.datadoghq.com/logs?query=service%3Apaymas-checkout+%40event%3Apurchase_failed+status%3Aerror&agg_m=count&agg_t=count&index=%2A)**\n\nThe monitor was last triggered at Mon Oct 19 2026 07:50:09 UTC.\n\n- - -\n\n[[Monitor Status](https://app.datadoghq.com/monitors/333686229?from_ts=1792395309000&to_ts=1792396509000&event_id=8860608202878596421&link_source=monitor_notif&link_monitor_id=333686229&link_event_id=8860608202878596421&link_event_ts=1792396209)] · [[Edit Monitor](https://app.datadoghq.com/monitors/333686229/edit?link_source=monitor_notif&link_monitor_id=333686229&link_event_id=8860608202878596421&link_event_ts=1792396209)] · [[Related Logs](https://app.datadoghq.com/logs?query=service%3Apaymas-checkout+%40event%3Apurchase_failed+status%3Aerror&from_ts=1792395909000&to_ts=1792396209000&live=false&agg_m=count&agg_t=count&index=%2A&link_source=monitor_notif&link_monitor_id=333686229&link_event_id=8860608202878596421&link_event_ts=1792396209)]\n%%%"
 }

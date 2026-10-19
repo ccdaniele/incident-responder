@@ -30,15 +30,24 @@ paymas-checkout:
   "monitor": { "id": "333686229", "title": "...", "query": "..." },
   "alert_time": "ISO",
   "window": { "from": "ISO", "to": "ISO" },
-  "versions": { "bad": "afbfc00", "previous": "3910d28" },
+  "versions": { "bad": "afbfc00", "previous": "3910d28", "previous_source": "logs" },
   "commits": [{ "sha": "...", "message": "...", "author": "...", "date": "ISO" }],
   "diff": { "base": "...", "head": "...", "files": [{ "path": "...", "additions": 0, "deletions": 0, "patch": "..." }] },
   "logs": { "count": 0, "by_event": {}, "by_error_code": {}, "samples": [] },
   "impact": { "failed_requests": 0, "affected_customers": 0, "affected_merchants": 0, "amount_cents": 0 }
 }
 ```
-- versions.bad = most common `version` in the alert's matching logs;
-  versions.previous = most recent different version seen before the window.
+- versions.bad = most common `version` in the alert's matching logs.
+- versions.previous = the most recent different version in logs over the 7 days
+  before the window (`service:<name> -version:<bad>`). If none is found, the
+  short sha of the first parent of `<bad>`
+  (`GET /repos/<repo>/commits/<bad>`). versions.previous_source is `logs` or
+  `git_parent`. The stage fails only when both are unavailable.
+- If compare of a log-derived previous returns 404, retry once with that first
+  parent. versions.previous becomes the parent short sha, and
+  versions.previous_source is
+  `git_parent (log version <sha> not found on GitHub)`.
+- GitHub errors include the base and head shas.
 - Window = 15 minutes before the alert time until the alert time.
 - samples: at most 20 masked log lines.
 - Masking: customer_id "V-14582093" → "V-XXXX2093"; customer_name → "[name]".
