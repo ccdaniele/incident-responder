@@ -1,0 +1,4 @@
+min_confidence: 0.8
+max_changed_files: 3
+protected_paths: [src/credit/, src/collections/, .cursor/]
+protected_services: []
