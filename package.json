@@ -8,7 +8,9 @@
   },
   "scripts": {
     "dev": "tsx src/server.ts",
-    "replay": "tsx scripts/replay.ts"
+    "replay": "tsx scripts/replay.ts",
+    "demo:deploy": "bash demo/deploy.sh",
+    "demo:reset": "bash demo/reset.sh"
   },
   "dependencies": {
     "fastify": "^5.6.1"
