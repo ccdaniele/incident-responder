@@ -1,5 +1,6 @@
 import { execFile } from "node:child_process";
 import { mkdir, readFile, rm } from "node:fs/promises";
+import os from "node:os";
 import path from "node:path";
 import { promisify } from "node:util";
 
@@ -22,7 +23,7 @@ export async function prepareWorkspace(
     throw new Error(`invalid version: ${sha}`);
   }
 
-  const dest = path.resolve("workspaces", incidentId);
+  const dest = path.join(os.tmpdir(), "paymas-workspaces", incidentId);
   const plain = `https://github.com/${repo}.git`;
   await rm(dest, { recursive: true, force: true });
   await mkdir(path.dirname(dest), { recursive: true });
@@ -37,19 +38,19 @@ export async function prepareWorkspace(
       ],
       token,
     );
+    try {
+      await git(["checkout", "--quiet", sha], token, dest);
+    } finally {
+      await git(["remote", "set-url", "origin", plain], token, dest);
+      await assertTokenRemoved(dest, token);
+    }
+
+    await rm(path.join(dest, ".git"), { recursive: true, force: true });
+    return dest;
   } catch (error) {
     await rm(dest, { recursive: true, force: true });
     throw error;
   }
-
-  try {
-    await git(["checkout", "--quiet", sha], token, dest);
-  } finally {
-    await git(["remote", "set-url", "origin", plain], token, dest);
-    await assertTokenRemoved(dest, token);
-  }
-
-  return dest;
 }
 
 async function git(
