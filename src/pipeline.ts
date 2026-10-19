@@ -1,14 +1,6 @@
 import { collectEvidence, evidenceSummary } from "./evidence/collect.js";
-import {
-  updateIncidentStatus,
-  writeIncidentJson,
-  type IncidentStatus,
-} from "./incidents/store.js";
-
-const stages: { label: string; file: string; status: IncidentStatus }[] = [
-  { label: "triage", file: "triage.json", status: "triage" },
-  { label: "gate", file: "decision.json", status: "decided" },
-];
+import { updateIncidentStatus, writeIncidentJson } from "./incidents/store.js";
+import { runTriage } from "./triage/run.js";
 
 export async function runPipeline(incidentId: string): Promise<void> {
   console.log(`[${incidentId}] evidence: started`);
@@ -17,13 +9,11 @@ export async function runPipeline(incidentId: string): Promise<void> {
   await updateIncidentStatus(incidentId, "evidence", "evidence complete");
   console.log(evidenceSummary(incidentId, evidence));
 
-  for (const stage of stages) {
-    console.log(`[${incidentId}] ${stage.label}: started`);
-    await writeIncidentJson(incidentId, stage.file, { todo: true });
-    await updateIncidentStatus(
-      incidentId,
-      stage.status,
-      `${stage.label} complete`,
-    );
-  }
+  console.log(`[${incidentId}] triage: started`);
+  await runTriage(incidentId, evidence);
+  await updateIncidentStatus(incidentId, "triage", "triage complete");
+
+  console.log(`[${incidentId}] gate: started`);
+  await writeIncidentJson(incidentId, "decision.json", { todo: true });
+  await updateIncidentStatus(incidentId, "decided", "gate complete");
 }
