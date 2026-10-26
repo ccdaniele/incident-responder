@@ -10,6 +10,7 @@
     "dev": "tsx src/server.ts",
     "replay": "tsx scripts/replay.ts",
     "report": "tsx scripts/report.ts",
+    "triage": "tsx scripts/triage.ts",
     "demo:deploy": "bash demo/deploy.sh",
     "demo:reset": "bash demo/reset.sh",
     "test": "vitest run"
