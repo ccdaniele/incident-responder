@@ -1,4 +1,5 @@
 import { runReport } from "../src/report/run.js";
+import { runVerify } from "../src/verify/run.js";
 
 process.loadEnvFile();
 
@@ -8,5 +9,6 @@ if (!incidentId) {
   process.exit(1);
 }
 
+await runVerify(incidentId);
 const ok = await runReport(incidentId);
 if (!ok) process.exit(1);

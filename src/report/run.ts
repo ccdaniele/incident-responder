@@ -36,6 +36,7 @@ async function loadArtifacts(incidentId: string): Promise<IncidentArtifacts> {
     triage: await readOptional(incidentId, "triage.json"),
     decision: await readOptional(incidentId, "decision.json"),
     fix: await readOptional(incidentId, "fix.json"),
+    verify: await readOptional(incidentId, "verify.json"),
   };
 }
 

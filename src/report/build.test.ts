@@ -110,8 +110,11 @@ describe("buildReport", () => {
     expect(report.markdown).toContain("**Failed requests:** 7");
     expect(report.markdown).toContain("**Affected customers:** 7");
     expect(report.markdown).toContain("**Affected merchants:** 4");
-    expect(report.markdown).toContain("**Amount:** $553");
+    expect(report.markdown).toContain("**Purchase volume failed:** $553");
+    expect(report.markdown).not.toContain("**Amount:**");
+    expect(report.markdown).not.toContain("## CI verification");
     expect(report.markdown).not.toContain("## Why it was blocked");
+    expectBlankLineBeforeEachHeading(report.markdown);
     expect(report.destination).toEqual({
       kind: "pr_comment",
       owner: "ccdaniele",
@@ -170,6 +173,7 @@ describe("buildReport", () => {
       "fail — protected path — protected path: src/collections/onTime.ts",
     );
     expect(report.markdown).toContain("## Why it was blocked");
+    expectBlankLineBeforeEachHeading(report.markdown);
     expect(report.markdown).toContain(
       "- suspect files — suspect file not in the diff: src/installments/split.ts",
     );
@@ -204,12 +208,139 @@ describe("buildReport", () => {
     expect(report.markdown).not.toContain("**Cost:**");
   });
 
+  it("adds a CI verification section with check marks and the proof summary", () => {
+    const report = buildReport(
+      artifacts({
+        verify: {
+          head_sha: fullSha,
+          timed_out: false,
+          checks: [
+            {
+              name: "test",
+              conclusion: "success",
+              workflow: "ci",
+              event: "pull_request",
+              completed_at: "2026-10-26T21:05:40Z",
+            },
+            {
+              name: "regression-proof",
+              conclusion: "success",
+              workflow: "regression-proof",
+              event: "pull_request",
+              completed_at: "2026-10-26T21:05:29Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(report.markdown).toContain("## CI verification");
+    expect(report.markdown).toContain("- ✓ ci / test (pull_request)");
+    expect(report.markdown).toContain("- ✓ regression-proof / regression-proof (pull_request)");
+    expect(report.markdown).toContain(
+      "Regression test fails on main and passes on the fix",
+    );
+    expect(report.markdown).not.toContain("CI still running");
+    expectBlankLineBeforeEachHeading(report.markdown);
+  });
+
+  it("labels checks the way GitHub does and keeps the latest run of each name", () => {
+    const report = buildReport(
+      artifacts({
+        verify: {
+          head_sha: fullSha,
+          timed_out: false,
+          checks: [
+            { name: "GitGuardian Security Checks", conclusion: "success" },
+            {
+              name: "test",
+              conclusion: "failure",
+              workflow: "ci",
+              event: "pull_request",
+              completed_at: "2026-10-19T11:33:31Z",
+            },
+            {
+              name: "regression-proof",
+              conclusion: "success",
+              workflow: "regression-proof",
+              event: "pull_request",
+              completed_at: "2026-10-26T21:05:29Z",
+            },
+            {
+              name: "test",
+              conclusion: "success",
+              workflow: "ci",
+              event: "push",
+              completed_at: "2026-10-19T11:33:28Z",
+            },
+            {
+              name: "test",
+              conclusion: "success",
+              workflow: "ci",
+              event: "pull_request",
+              completed_at: "2026-10-26T21:05:40Z",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(report.markdown).toContain("- ✓ GitGuardian Security Checks");
+    expect(report.markdown).toContain("- ✓ ci / test (pull_request)");
+    expect(report.markdown).toContain("- ✓ ci / test (push)");
+    expect(report.markdown).toContain("- ✓ regression-proof / regression-proof (pull_request)");
+    expect(report.markdown).not.toContain("- ✗ ci / test (pull_request)");
+    expect(report.markdown).not.toMatch(/- ✓ ci \/ test \(pull_request\).*- ✓ ci \/ test \(pull_request\)/s);
+    expect(report.markdown).toContain(
+      "Regression test fails on main and passes on the fix",
+    );
+  });
+
+  it("marks a failed check and reports CI still running on timeout", () => {
+    const report = buildReport(
+      artifacts({
+        verify: {
+          head_sha: fullSha,
+          timed_out: true,
+          checks: [
+            {
+              name: "test",
+              conclusion: "success",
+              workflow: "ci",
+              event: "pull_request",
+            },
+            {
+              name: "regression-proof",
+              conclusion: null,
+              workflow: "regression-proof",
+              event: "pull_request",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(report.markdown).toContain("- ✓ ci / test (pull_request)");
+    expect(report.markdown).toContain("- ✗ regression-proof / regression-proof (pull_request)");
+    expect(report.markdown).toContain("CI still running");
+    expect(report.markdown).not.toContain(
+      "Regression test fails on main and passes on the fix",
+    );
+  });
+
   it("fails closed when the gate decision is missing", () => {
     expect(() => buildReport(artifacts({ decision: undefined }))).toThrow(
       "decision.json is missing",
     );
   });
 });
+
+function expectBlankLineBeforeEachHeading(markdown: string): void {
+  for (const match of markdown.matchAll(/^## .+$/gm)) {
+    const index = match.index ?? 0;
+    expect(markdown.slice(Math.max(0, index - 2), index)).toBe("\n\n");
+  }
+}
 
 describe("parsePullRequestUrl", () => {
   it("reads owner, repo, and number from a GitHub pull request URL", () => {

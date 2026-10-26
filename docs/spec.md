@@ -12,6 +12,7 @@
   - triage.json — triage result (stage 3)
   - decision.json — gate decision (stage 4)
   - fix.json — fix result (stage 5), only after the gate allows a fix
+  - verify.json — CI check runs (stage 6), only when a PR exists
 - incident.json status: received → evidence → triage → decided → (needs_human | fixing → pr_opened | needs_human) → reported, or failed. verified and handed_to_human remain for later stages.
 - incident.json keeps agent_id (set as soon as a fix agent is created, before the prompt is sent) and run_id (set as soon as the fix run starts). Status updates must keep those fields.
 
@@ -111,14 +112,37 @@ A blocked gate writes no fix.json; incident status becomes `needs_human` and the
 - Incident status becomes `pr_opened` only when the run status is `finished` and `pr_url` is present. A timeout (15 minutes, then cancel), any other run status, or a finished run with no pull request URL sets `needs_human`.
 - The cloud agent is `composer-2.5`, started from the service branch in services.yaml, with `autoCreatePR` and metadata `incident_id` and `service`.
 
+## CI verification (verify.json)
+Written after the fix stage when `fix.json` has a `pr_url`. Skipped otherwise.
+Polls GitHub check runs on the PR head commit every 15 seconds for up to 10
+minutes, until every check run has completed. An empty list keeps polling
+(CI may not have started). Timeout does not fail the pipeline.
+```json
+{
+  "head_sha": "d416cbcae4a5afb456ad245d38c5c0bf66bdb2c1",
+  "timed_out": false,
+  "checks": [
+    { "name": "test", "conclusion": "success" },
+    { "name": "regression-proof", "conclusion": "success" }
+  ]
+}
+```
+- `name` and `conclusion` come from each check run. `conclusion` is null when
+  a check has not finished (timeout).
+- `npm run report -- <incident-id>` re-runs this stage, then rebuilds the
+  report. No agents.
+
 ## Incident report (runs/<incident_id>/report.md)
-Written after the gate (and the fix stage when it ran). Always saved to
+Written after the gate (and the fix and verify stages when they ran). Always saved to
 `runs/<incident_id>/report.md`. Markdown includes: incident id, alert title and
 time, timeline (alert received, evidence gathered, triage done, gate decision,
 fix agent finished), suspect commit and changed files, triage summary and
 confidence, gate decision with each check marked pass or fail, fix agent id /
-run id / duration / cost when available, and customer impact. PII is masked the
-same way as evidence (customer ids and names).
+run id / duration / cost when available, CI verification (each check marked
+✓ or ✗, plus “Regression test fails on main and passes on the fix” when both
+the regression-proof and test jobs succeeded, or “CI still running” on
+timeout), and customer impact. PII is masked the same way as evidence
+(customer ids and names).
 
 Posting:
 - Gate ALLOWED and a PR exists: comment on that PR. PR number comes from
@@ -129,4 +153,5 @@ Posting:
   “Why it was blocked” section listing the failed checks.
 
 If building the report fails, log the error and do not post.
-Rebuild from saved run data with `npm run report -- <incident-id>` (no agents).
+Rebuild from saved run data with `npm run report -- <incident-id>` (re-runs CI
+verification when a PR exists; no agents).

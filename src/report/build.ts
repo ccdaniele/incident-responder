@@ -1,4 +1,5 @@
 import { maskBundle } from "../evidence/mask.js";
+import { ciVerificationSummary, type RecordedCheck } from "../verify/poll.js";
 
 export const blockedIssueRepo = "ccdaniele/paymas-checkout";
 
@@ -15,6 +16,7 @@ export type IncidentArtifacts = {
   triage?: unknown;
   decision?: unknown;
   fix?: unknown;
+  verify?: unknown;
 };
 
 export type BuiltReport = {
@@ -50,6 +52,10 @@ type ParsedReport = {
     affected_customers: number;
     affected_merchants: number;
     amount_cents: number;
+  } | null;
+  verify: {
+    timed_out: boolean;
+    checks: RecordedCheck[];
   } | null;
   destination: Destination;
 };
@@ -126,6 +132,7 @@ function parseArtifacts(artifacts: IncidentArtifacts): ParsedReport {
         }
       : null,
     impact: parseImpact(evidence),
+    verify: parseVerify(artifacts.verify),
     destination,
   };
 }
@@ -179,6 +186,7 @@ function renderMarkdown(report: ParsedReport): string {
     "",
     ...report.checks.map(checkLine),
     ...fixSection(report.fix),
+    ...ciSection(report.verify),
     ...impactSection(report.impact),
     ...blockedSection(report),
   ];
@@ -218,6 +226,47 @@ function fixSection(fix: ParsedReport["fix"]): string[] {
   return lines;
 }
 
+function ciSection(verify: ParsedReport["verify"]): string[] {
+  if (!verify) return [];
+  const checks = latestChecks(verify.checks);
+  const summary = ciVerificationSummary({ timed_out: verify.timed_out, checks });
+  const lines = ["", "## CI verification", "", ...checks.map(ciCheckLine)];
+  if (!summary) return lines;
+  if (checks.length > 0) lines.push("");
+  lines.push(summary);
+  return lines;
+}
+
+function latestChecks(checks: RecordedCheck[]): RecordedCheck[] {
+  const latest = new Map<string, RecordedCheck>();
+  for (const check of checks) {
+    const name = checkLabel(check);
+    const previous = latest.get(name);
+    if (!previous || completedAtMs(check) >= completedAtMs(previous)) {
+      latest.set(name, check);
+    }
+  }
+  return [...latest.values()];
+}
+
+function ciCheckLine(check: RecordedCheck): string {
+  const mark = check.conclusion === "success" ? "✓" : "✗";
+  return `- ${mark} ${checkLabel(check)}`;
+}
+
+function checkLabel(check: RecordedCheck): string {
+  if (check.workflow && check.event) {
+    return `${check.workflow} / ${check.name} (${check.event})`;
+  }
+  return check.name;
+}
+
+function completedAtMs(check: RecordedCheck): number {
+  if (!check.completed_at) return 0;
+  const ms = Date.parse(check.completed_at);
+  return Number.isFinite(ms) ? ms : 0;
+}
+
 function impactSection(impact: ParsedReport["impact"]): string[] {
   if (!impact) return [];
   return [
@@ -227,7 +276,7 @@ function impactSection(impact: ParsedReport["impact"]): string[] {
     `- **Failed requests:** ${impact.failed_requests}`,
     `- **Affected customers:** ${impact.affected_customers}`,
     `- **Affected merchants:** ${impact.affected_merchants}`,
-    `- **Amount:** ${formatDollars(impact.amount_cents)}`,
+    `- **Purchase volume failed:** ${formatDollars(impact.amount_cents)}`,
   ];
 }
 
@@ -339,6 +388,35 @@ function parseFix(value: unknown): {
     duration_ms: numberField(record, "duration_ms"),
     cost_usd: numberField(record, "cost_usd"),
     pr_url: stringField(record, "pr_url") ?? null,
+  };
+}
+
+function parseVerify(value: unknown): ParsedReport["verify"] {
+  const record = asRecord(value);
+  if (!record) return null;
+  const checks = Array.isArray(record.checks)
+    ? record.checks.flatMap((item) => {
+        const check = asRecord(item);
+        const name = stringField(check, "name");
+        if (!name) return [];
+        const conclusion = stringField(check, "conclusion") ?? null;
+        const completed_at = stringField(check, "completed_at");
+        const workflow = stringField(check, "workflow");
+        const event = stringField(check, "event");
+        return [
+          {
+            name,
+            conclusion,
+            ...(completed_at ? { completed_at } : {}),
+            ...(workflow ? { workflow } : {}),
+            ...(event ? { event } : {}),
+          },
+        ];
+      })
+    : [];
+  return {
+    timed_out: record.timed_out === true,
+    checks,
   };
 }
 

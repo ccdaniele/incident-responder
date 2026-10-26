@@ -7,6 +7,7 @@ import { readIncidentJson, updateIncidentStatus, writeIncidentJson } from "./inc
 import { runFix } from "./fix/run.js";
 import { runReport } from "./report/run.js";
 import { runTriage } from "./triage/run.js";
+import { runVerify } from "./verify/run.js";
 
 export async function runPipeline(incidentId: string): Promise<void> {
   console.log(`[${incidentId}] evidence: started`);
@@ -28,7 +29,7 @@ export async function runPipeline(incidentId: string): Promise<void> {
   await updateIncidentStatus(incidentId, "decided", "gate complete");
 
   await runFix(incidentId);
-
+  await runVerify(incidentId);
   await runReport(incidentId);
 }
 

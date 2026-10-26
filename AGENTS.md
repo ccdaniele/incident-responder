@@ -15,6 +15,7 @@ policy gate (code) → fix (agent) or human → CI proof (code) → report (code
 - src/evidence/ — Datadog, GitHub, PII masking, evidence bundle
 - src/triage/ — triage agent, its prompt and output schema
 - src/gate/ — deterministic policy gate
+- src/verify/ — CI check-run polling after a fix PR
 - src/report/ — incident report, PR comment or GitHub issue
 - demo/ — scripts to deploy a seeded bug and reset (demo only)
 - policy.yaml, services.yaml — configuration
