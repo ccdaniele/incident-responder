@@ -92,7 +92,7 @@ Any missing input or error → block.
 
 ## Fix result (fix.json)
 Written only after the gate allows a fix and a cloud run has been sent.
-A blocked gate writes no fix.json; incident status becomes `needs_human` and the pipeline stops.
+A blocked gate writes no fix.json; incident status becomes `needs_human` and the fix stage stops. The report stage still runs.
 ```json
 {
   "agent_id": "bc-...",
@@ -110,3 +110,23 @@ A blocked gate writes no fix.json; incident status becomes `needs_human` and the
 - `cost_usd` is the charged dollar cost from `agent.getUsage()` for that run. Cost can lag the run, so the stage retries for about 30 seconds. Null when cost is still unavailable. `0` is a real charge (plan-included or credit usage), not a missing value.
 - Incident status becomes `pr_opened` only when the run status is `finished` and `pr_url` is present. A timeout (15 minutes, then cancel), any other run status, or a finished run with no pull request URL sets `needs_human`.
 - The cloud agent is `composer-2.5`, started from the service branch in services.yaml, with `autoCreatePR` and metadata `incident_id` and `service`.
+
+## Incident report (runs/<incident_id>/report.md)
+Written after the gate (and the fix stage when it ran). Always saved to
+`runs/<incident_id>/report.md`. Markdown includes: incident id, alert title and
+time, timeline (alert received, evidence gathered, triage done, gate decision,
+fix agent finished), suspect commit and changed files, triage summary and
+confidence, gate decision with each check marked pass or fail, fix agent id /
+run id / duration / cost when available, and customer impact. PII is masked the
+same way as evidence (customer ids and names).
+
+Posting:
+- Gate ALLOWED and a PR exists: comment on that PR. PR number comes from
+  `fix.json` `pr_url`.
+- Gate BLOCKED: create an issue in `ccdaniele/paymas-checkout` titled
+  `[Incident <id>] <alert title> — needs human review`, with labels `incident`
+  and `needs-human` (created if missing). The body is the report plus a
+  “Why it was blocked” section listing the failed checks.
+
+If building the report fails, log the error and do not post.
+Rebuild from saved run data with `npm run report -- <incident-id>` (no agents).
