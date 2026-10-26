@@ -6,3 +6,4 @@ workspaces/
 demo/.last-good
 logs/
 runs/
+.DS_Store
