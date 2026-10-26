@@ -107,6 +107,8 @@ describe("buildReport", () => {
     );
     expect(report.markdown).toContain("**Duration:** 46s");
     expect(report.markdown).toContain("**Cost:** $0.13");
+    expect(report.markdown).not.toContain("$0.00");
+    expect(report.markdown).not.toContain("pending (usage not yet reported)");
     expect(report.markdown).toContain("**Failed requests:** 7");
     expect(report.markdown).toContain("**Affected customers:** 7");
     expect(report.markdown).toContain("**Affected merchants:** 4");
@@ -205,7 +207,33 @@ describe("buildReport", () => {
     expect(report.destination).toEqual({ kind: "none" });
     expect(report.markdown).toContain("## Fix");
     expect(report.markdown).toContain("**Agent ID:** `bc-1`");
-    expect(report.markdown).not.toContain("**Cost:**");
+    expect(report.markdown).toContain("**Cost:** pending (usage not yet reported)");
+    expect(report.markdown).not.toContain("$0.00");
+  });
+
+  it("never shows $0.00 and includes token counts when usage is pending", () => {
+    const report = buildReport(
+      artifacts({
+        fix: {
+          agent_id: "bc-1",
+          run_id: "run-1",
+          pr_url: "https://github.com/ccdaniele/paymas-checkout/pull/4",
+          duration_ms: 1000,
+          cost_usd: 0,
+          usage: {
+            inputTokens: 12000,
+            outputTokens: 345,
+            cacheReadTokens: 0,
+            cacheWriteTokens: 0,
+            totalTokens: 12345,
+          },
+        },
+      }),
+    );
+
+    expect(report.markdown).toContain("**Cost:** pending (usage not yet reported)");
+    expect(report.markdown).toContain("**Tokens:** 12345 total (12000 in, 345 out)");
+    expect(report.markdown).not.toContain("$0.00");
   });
 
   it("adds a CI verification section with check marks and the proof summary", () => {

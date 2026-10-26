@@ -1,3 +1,4 @@
+import { refreshFixUsage } from "../src/fix/usage.js";
 import { runReport } from "../src/report/run.js";
 import { runVerify } from "../src/verify/run.js";
 
@@ -10,5 +11,6 @@ if (!incidentId) {
 }
 
 await runVerify(incidentId);
+await refreshFixUsage(incidentId);
 const ok = await runReport(incidentId);
 if (!ok) process.exit(1);

@@ -1,4 +1,4 @@
-import { Agent, CursorAgentError, type RunResult, type SDKAgent } from "@cursor/sdk";
+import { Agent, CursorAgentError, type RunResult, type TokenUsage } from "@cursor/sdk";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
@@ -10,9 +10,9 @@ import {
   writeIncidentJson,
 } from "../incidents/store.js";
 import { triageSchema, type TriageResult } from "../triage/schema.js";
+import { isReportedCost, waitForRunUsage } from "./usage.js";
 
 const timeoutMs = 15 * 60 * 1000;
-const costRetryDelaysMs = [0, 10_000, 10_000, 10_000];
 const toolProgressEvery = 15;
 
 const triageMetadataKeys = [
@@ -36,6 +36,7 @@ type FixRecord = {
   branch: string | null;
   duration_ms: number;
   cost_usd: number | null;
+  usage: TokenUsage | null;
 };
 
 export async function runFix(incidentId: string): Promise<void> {
@@ -135,7 +136,7 @@ export async function runFix(incidentId: string): Promise<void> {
       const result = await run.wait();
       const durationMs = result.durationMs ?? Date.now() - startedAt;
       const pull = pullRequest(result);
-      const costUsd = await readCostUsd(agent, result.id);
+      const usage = await waitForRunUsage(() => agent.getUsage({ runId: result.id }));
       const record: FixRecord = {
         agent_id: agent.agentId,
         run_id: result.id,
@@ -143,7 +144,8 @@ export async function runFix(incidentId: string): Promise<void> {
         pr_url: pull?.pr_url ?? null,
         branch: pull?.branch ?? null,
         duration_ms: durationMs,
-        cost_usd: costUsd,
+        cost_usd: usage.cost_usd,
+        usage: usage.tokens,
       };
       await writeFix(incidentId, record);
 
@@ -155,7 +157,9 @@ export async function runFix(incidentId: string): Promise<void> {
       await updateIncidentStatus(incidentId, "pr_opened", pull.pr_url);
       settled = true;
       const seconds = Math.round(durationMs / 1000);
-      const cost = costUsd === null ? "n/a" : `$${costUsd.toFixed(2)}`;
+      const cost = isReportedCost(usage.cost_usd)
+        ? `$${usage.cost_usd.toFixed(2)}`
+        : "pending";
       console.log(`[${incidentId}] fix: PR opened ${pull.pr_url} (${cost}, ${seconds}s)`);
     } catch (error) {
       if (run.supports("cancel")) await run.cancel().catch(() => {});
@@ -305,20 +309,6 @@ function failureNote(
   return "fix complete";
 }
 
-async function readCostUsd(agent: SDKAgent, runId: string): Promise<number | null> {
-  for (let attempt = 0; attempt < costRetryDelaysMs.length; attempt += 1) {
-    const delay = costRetryDelaysMs[attempt] ?? 0;
-    if (delay > 0) await wait(delay);
-    try {
-      const usage = await agent.getUsage({ runId });
-      if (usage.cost) return usage.cost.chargedCents / 100;
-    } catch {
-      // Cost can lag the run, and a fresh run id can 404 for a moment.
-    }
-  }
-  return null;
-}
-
 async function writeFix(incidentId: string, record: FixRecord): Promise<void> {
   await writeIncidentJson(incidentId, "fix.json", record);
 }
@@ -353,10 +343,4 @@ function asRecord(value: unknown): Record<string, unknown> | undefined {
     return undefined;
   }
   return value as Record<string, unknown>;
-}
-
-function wait(ms: number): Promise<void> {
-  return new Promise((resolve) => {
-    setTimeout(resolve, ms);
-  });
 }

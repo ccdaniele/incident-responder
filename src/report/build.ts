@@ -1,4 +1,6 @@
+import type { TokenUsage } from "@cursor/sdk";
 import { maskBundle } from "../evidence/mask.js";
+import { formatCostLabel, formatTokens, isReportedCost } from "../fix/usage.js";
 import { ciVerificationSummary, type RecordedCheck } from "../verify/poll.js";
 
 export const blockedIssueRepo = "ccdaniele/paymas-checkout";
@@ -46,6 +48,7 @@ type ParsedReport = {
     run_id: string | null;
     duration_ms: number | null;
     cost_usd: number | null;
+    usage: TokenUsage | null;
   } | null;
   impact: {
     failed_requests: number;
@@ -129,6 +132,7 @@ function parseArtifacts(artifacts: IncidentArtifacts): ParsedReport {
           run_id: fix.run_id,
           duration_ms: fix.duration_ms,
           cost_usd: fix.cost_usd,
+          usage: fix.usage,
         }
       : null,
     impact: parseImpact(evidence),
@@ -220,8 +224,10 @@ function fixSection(fix: ParsedReport["fix"]): string[] {
   if (fix.duration_ms !== null) {
     lines.push(`- **Duration:** ${formatDuration(fix.duration_ms)}`);
   }
-  if (fix.cost_usd !== null) {
-    lines.push(`- **Cost:** ${formatCost(fix.cost_usd)}`);
+  lines.push(`- **Cost:** ${formatCostLabel(fix.cost_usd)}`);
+  if (!isReportedCost(fix.cost_usd)) {
+    const tokens = formatTokens(fix.usage);
+    if (tokens) lines.push(`- **Tokens:** ${tokens}`);
   }
   return lines;
 }
@@ -378,6 +384,7 @@ function parseFix(value: unknown): {
   run_id: string | null;
   duration_ms: number | null;
   cost_usd: number | null;
+  usage: TokenUsage | null;
   pr_url: string | null;
 } | null {
   const record = asRecord(value);
@@ -387,7 +394,27 @@ function parseFix(value: unknown): {
     run_id: stringField(record, "run_id") ?? null,
     duration_ms: numberField(record, "duration_ms"),
     cost_usd: numberField(record, "cost_usd"),
+    usage: parseUsage(record.usage),
     pr_url: stringField(record, "pr_url") ?? null,
+  };
+}
+
+function parseUsage(value: unknown): TokenUsage | null {
+  const record = asRecord(value);
+  if (!record) return null;
+  const inputTokens = numberField(record, "inputTokens") ?? 0;
+  const outputTokens = numberField(record, "outputTokens") ?? 0;
+  const cacheReadTokens = numberField(record, "cacheReadTokens") ?? 0;
+  const cacheWriteTokens = numberField(record, "cacheWriteTokens") ?? 0;
+  const totalTokens = numberField(record, "totalTokens") ?? 0;
+  const reasoningTokens = numberField(record, "reasoningTokens");
+  return {
+    inputTokens,
+    outputTokens,
+    cacheReadTokens,
+    cacheWriteTokens,
+    totalTokens,
+    ...(reasoningTokens !== null ? { reasoningTokens } : {}),
   };
 }
 
@@ -480,10 +507,6 @@ function alertTimeFromDate(value: unknown): string | undefined {
 function formatDuration(ms: number): string {
   if (ms < 1000) return `${ms}ms`;
   return `${Math.round(ms / 1000)}s`;
-}
-
-function formatCost(cost: number): string {
-  return `$${cost.toFixed(2)}`;
 }
 
 function formatDollars(cents: number): string {
