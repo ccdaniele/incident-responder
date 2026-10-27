@@ -102,15 +102,17 @@ A blocked gate writes no fix.json; incident status becomes `needs_human` and the
   "pr_url": "https://github.com/ccdaniele/paymas-checkout/pull/1",
   "branch": "cursor/fix-...",
   "duration_ms": 74000,
-  "cost_usd": 0.42
+  "cost_usd": 0.42,
+  "wrong_base": false
 }
 ```
 - `status` is the run status: `finished`, `error`, or `cancelled`.
 - `pr_url` and `branch` come from the run's git metadata. Both are null when no pull request was opened. `run_id` is null when the run never started.
 - `duration_ms` is the run duration.
 - `cost_usd` is the charged dollar cost from `agent.getUsage()` for that run. Cost can lag the run, so after the agent finishes the stage retries `getUsage()` up to 3 times, 5 seconds apart, including when cost is `0` or missing. Null when cost is still unavailable. The report never shows `$0.00`; it shows `Cost: pending (usage not yet reported)` and token counts when usage is present. `npm run report` uses the same retry and display rule.
-- Incident status becomes `pr_opened` only when the run status is `finished` and `pr_url` is present. A timeout (15 minutes, then cancel), any other run status, or a finished run with no pull request URL sets `needs_human`.
-- The cloud agent is `composer-2.5`, started from the service branch in services.yaml, with `autoCreatePR` and metadata `incident_id` and `service`.
+- Incident status becomes `pr_opened` only when the run status is `finished`, `pr_url` is present, and the PR head contains the suspect commit. A timeout (15 minutes, then cancel), any other run status, a finished run with no pull request URL, or a PR built on the wrong base sets `needs_human`.
+- The cloud agent is `composer-2.5`, started from the gate-approved triage `suspect_commit` (the deployed bad commit) via `repos[].startingRef`, with `autoCreatePR` targeting the service branch in services.yaml, and metadata `incident_id` and `service`.
+- After the agent finishes with a PR, `GET /repos/<repo>/compare/<suspect>...<head>` must return `status` `ahead` or `identical`. If it does not, comment that the fix was built on the wrong base, set `needs_human`, and say so in the report. `wrong_base` on fix.json is true in that case.
 
 ## CI verification (verify.json)
 Written after the fix stage when `fix.json` has a `pr_url`. Skipped otherwise.
@@ -139,11 +141,13 @@ time, timeline (alert received, evidence gathered, triage done, gate decision,
 fix agent finished), suspect commit and changed files, triage summary and
 confidence, gate decision with each check marked pass or fail, fix agent id /
 run id / duration / cost (`$x.xx`, or `Cost: pending (usage not yet reported)`
-plus token counts when usage is present), CI verification (each check marked
-✓ or ✗, plus “Regression test fails on main and passes on the fix” when both
-the regression-proof and test jobs succeeded, or “CI still running” on
-timeout), and customer impact. PII is masked the same way as evidence
-(customer ids and names).
+plus token counts when usage is present), whether the fix was built on the
+wrong base, CI verification (each check marked ✓ or ✗ by its full name
+`workflow / job (event)`, plus “Regression test fails on main and passes on
+the fix” only when every check succeeded, “CI failed: <check names> — needs
+human review” when any check failed, or “CI still running” when any check is
+still running or the poll timed out), and customer impact. PII is masked the
+same way as evidence (customer ids and names).
 
 Posting:
 - Gate ALLOWED and a PR exists: comment on that PR. PR number comes from

@@ -7,6 +7,8 @@ export type CheckRun = {
   event?: string;
 };
 
+export const compareContainsStatuses = ["ahead", "identical"] as const;
+
 export async function getPullRequestHeadSha(
   owner: string,
   repo: string,
@@ -26,6 +28,45 @@ export async function getPullRequestHeadSha(
     throw new Error("GitHub pull request response is missing head.sha");
   }
   return sha;
+}
+
+export async function compareCommitStatus(
+  owner: string,
+  repo: string,
+  base: string,
+  head: string,
+): Promise<string> {
+  const response = await githubGet(
+    `/repos/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}/compare/${encodeURIComponent(base)}...${encodeURIComponent(head)}`,
+  );
+  if (!response.ok) {
+    throw new Error(
+      `GitHub compare failed: ${response.status} ${await errorMessage(response)} (base ${base}, head ${head})`,
+    );
+  }
+  const body: unknown = await response.json();
+  const status = stringField(asRecord(body), "status");
+  if (!status) {
+    throw new Error(
+      `GitHub compare response is missing status (base ${base}, head ${head})`,
+    );
+  }
+  return status;
+}
+
+export async function prHeadContainsCommit(
+  owner: string,
+  repo: string,
+  number: number,
+  sha: string,
+): Promise<boolean> {
+  const head = await getPullRequestHeadSha(owner, repo, number);
+  const status = await compareCommitStatus(owner, repo, sha, head);
+  return commitContainsStatus(status);
+}
+
+export function commitContainsStatus(status: string): boolean {
+  return (compareContainsStatuses as readonly string[]).includes(status);
 }
 
 export async function listCommitCheckRuns(

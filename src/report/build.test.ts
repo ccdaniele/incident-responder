@@ -324,6 +324,59 @@ describe("buildReport", () => {
     );
   });
 
+  it("prints CI failed with full check names when any check failed", () => {
+    const report = buildReport(
+      artifacts({
+        verify: {
+          head_sha: fullSha,
+          timed_out: false,
+          checks: [
+            { name: "GitGuardian Security Checks", conclusion: "failure" },
+            {
+              name: "test",
+              conclusion: "success",
+              workflow: "ci",
+              event: "pull_request",
+            },
+            {
+              name: "regression-proof",
+              conclusion: "success",
+              workflow: "regression-proof",
+              event: "pull_request",
+            },
+          ],
+        },
+      }),
+    );
+
+    expect(report.markdown).toContain("- ✗ GitGuardian Security Checks");
+    expect(report.markdown).toContain(
+      "CI failed: GitGuardian Security Checks — needs human review",
+    );
+    expect(report.markdown).not.toContain(
+      "Regression test fails on main and passes on the fix",
+    );
+  });
+
+  it("says the fix was built on the wrong base", () => {
+    const report = buildReport(
+      artifacts({
+        fix: {
+          agent_id: "bc-1",
+          run_id: "run-1",
+          pr_url: "https://github.com/ccdaniele/paymas-checkout/pull/1",
+          duration_ms: 1000,
+          cost_usd: 0.13,
+          wrong_base: true,
+        },
+      }),
+    );
+
+    expect(report.markdown).toContain(
+      "The fix was built on the wrong base; needs human review.",
+    );
+  });
+
   it("marks a failed check and reports CI still running on timeout", () => {
     const report = buildReport(
       artifacts({

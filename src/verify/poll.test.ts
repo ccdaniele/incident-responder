@@ -167,19 +167,49 @@ describe("waitForCiChecks", () => {
 });
 
 describe("ciVerificationSummary", () => {
-  it("summarizes when regression-proof and test both succeed", () => {
+  it("summarizes only when every check succeeded", () => {
     expect(
       ciVerificationSummary({
         timed_out: false,
         checks: [
-          { name: "ci / test", conclusion: "success" },
-          { name: "regression-proof", conclusion: "success" },
+          { name: "GitGuardian Security Checks", conclusion: "success" },
+          {
+            name: "test",
+            conclusion: "success",
+            workflow: "ci",
+            event: "pull_request",
+          },
+          {
+            name: "regression-proof",
+            conclusion: "success",
+            workflow: "regression-proof",
+            event: "pull_request",
+          },
         ],
       }),
     ).toBe(ciSuccessSummary);
   });
 
-  it("reports CI still running on timeout", () => {
+  it("keeps CI still running when any check has not finished", () => {
+    expect(
+      ciVerificationSummary({
+        timed_out: false,
+        checks: [
+          {
+            name: "test",
+            conclusion: "success",
+            workflow: "ci",
+            event: "pull_request",
+          },
+          {
+            name: "regression-proof",
+            conclusion: null,
+            workflow: "regression-proof",
+            event: "pull_request",
+          },
+        ],
+      }),
+    ).toBe(ciStillRunningSummary);
     expect(
       ciVerificationSummary({
         timed_out: true,
@@ -188,15 +218,32 @@ describe("ciVerificationSummary", () => {
     ).toBe(ciStillRunningSummary);
   });
 
-  it("has no summary when a required job failed", () => {
+  it("lists failed checks by full name, not just test", () => {
     expect(
       ciVerificationSummary({
         timed_out: false,
         checks: [
-          { name: "test", conclusion: "failure" },
-          { name: "regression-proof", conclusion: "success" },
+          { name: "GitGuardian Security Checks", conclusion: "success" },
+          {
+            name: "test",
+            conclusion: "success",
+            workflow: "ci",
+            event: "push",
+          },
+          {
+            name: "test",
+            conclusion: "failure",
+            workflow: "ci",
+            event: "pull_request",
+          },
+          {
+            name: "regression-proof",
+            conclusion: "success",
+            workflow: "regression-proof",
+            event: "pull_request",
+          },
         ],
       }),
-    ).toBeNull();
+    ).toBe("CI failed: ci / test (pull_request) — needs human review");
   });
 });

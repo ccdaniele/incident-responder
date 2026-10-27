@@ -20,7 +20,7 @@ Do this, in order:
 4. Never modify src/credit/, src/collections/, or .cursor/.
 5. Run npm test and make sure everything passes.
 
-Open a pull request.
+Open a pull request targeting {{branch}}.
 Title: fix({{affected_area}}): <short summary> [{{incident_id}}]
 Body sections, in this order:
 ## Root cause

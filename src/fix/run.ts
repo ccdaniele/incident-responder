@@ -1,4 +1,12 @@
-import { Agent, CursorAgentError, type RunResult, type TokenUsage } from "@cursor/sdk";
+import {
+  Agent,
+  CursorAgentError,
+  type AgentOptions,
+  type AgentUsage,
+  type Run,
+  type RunResult,
+  type TokenUsage,
+} from "@cursor/sdk";
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { parse } from "yaml";
@@ -9,11 +17,40 @@ import {
   updateIncidentStatus,
   writeIncidentJson,
 } from "../incidents/store.js";
+import { parsePullRequestUrl } from "../report/build.js";
+import { postPullRequestComment } from "../report/github.js";
 import { triageSchema, type TriageResult } from "../triage/schema.js";
+import { prHeadContainsCommit } from "../verify/github.js";
 import { isReportedCost, waitForRunUsage } from "./usage.js";
 
 const timeoutMs = 15 * 60 * 1000;
 const toolProgressEvery = 15;
+
+export const wrongBaseComment =
+  "The fix was built on the wrong base; needs human review.";
+
+export type FixAgent = {
+  readonly agentId: string;
+  send: (message: string) => Promise<Run>;
+  getUsage: (options?: { runId?: string }) => Promise<AgentUsage>;
+  [Symbol.asyncDispose]: () => Promise<void>;
+};
+
+export type FixDeps = {
+  createAgent?: (options: AgentOptions) => Promise<FixAgent>;
+  prContainsCommit?: (
+    owner: string,
+    repo: string,
+    number: number,
+    sha: string,
+  ) => Promise<boolean>;
+  commentOnPr?: (
+    owner: string,
+    repo: string,
+    number: number,
+    body: string,
+  ) => Promise<string>;
+};
 
 const triageMetadataKeys = [
   "agent_id",
@@ -37,9 +74,10 @@ type FixRecord = {
   duration_ms: number;
   cost_usd: number | null;
   usage: TokenUsage | null;
+  wrong_base: boolean;
 };
 
-export async function runFix(incidentId: string): Promise<void> {
+export async function runFix(incidentId: string, deps: FixDeps = {}): Promise<void> {
   let settled = false;
 
   const handToHuman = async (note: string): Promise<void> => {
@@ -75,17 +113,21 @@ export async function runFix(incidentId: string): Promise<void> {
       return;
     }
 
-    const prompt = await fillPrompt(incidentId, triage, evidence);
+    const prompt = await fillPrompt(incidentId, triage, evidence, branch);
     await updateIncidentStatus(incidentId, "fixing", "fix started");
 
-    await using agent = await Agent.create({
+    const createAgent = deps.createAgent ?? ((options) => Agent.create(options));
+    const prContainsCommit = deps.prContainsCommit ?? prHeadContainsCommit;
+    const commentOnPr = deps.commentOnPr ?? postPullRequestComment;
+
+    await using agent = await createAgent({
       apiKey,
       model: { id: "composer-2.5" },
       cloud: {
         repos: [
           {
             url: repoUrl(evidence.repo),
-            startingRef: branch,
+            startingRef: triage.suspect_commit,
           },
         ],
         autoCreatePR: true,
@@ -137,6 +179,12 @@ export async function runFix(incidentId: string): Promise<void> {
       const durationMs = result.durationMs ?? Date.now() - startedAt;
       const pull = pullRequest(result);
       const usage = await waitForRunUsage(() => agent.getUsage({ runId: result.id }));
+      const parsedPull = pull ? parsePullRequestUrl(pull.pr_url) : undefined;
+      const wrongBase = await fixBuiltOnWrongBase(
+        parsedPull,
+        triage.suspect_commit,
+        prContainsCommit,
+      );
       const record: FixRecord = {
         agent_id: agent.agentId,
         run_id: result.id,
@@ -146,11 +194,30 @@ export async function runFix(incidentId: string): Promise<void> {
         duration_ms: durationMs,
         cost_usd: usage.cost_usd,
         usage: usage.tokens,
+        wrong_base: wrongBase,
       };
       await writeFix(incidentId, record);
 
       if (timedOut || result.status !== "finished" || !pull) {
         await handToHuman(failureNote(result, timedOut, pull));
+        return;
+      }
+
+      if (wrongBase) {
+        if (parsedPull) {
+          try {
+            await commentOnPr(
+              parsedPull.owner,
+              parsedPull.repo,
+              parsedPull.number,
+              wrongBaseComment,
+            );
+          } catch (error) {
+            const message = error instanceof Error ? error.message : String(error);
+            console.log(`[${incidentId}] fix: wrong-base comment failed: ${message}`);
+          }
+        }
+        await handToHuman("fix was built on the wrong base");
         return;
       }
 
@@ -231,11 +298,13 @@ async function fillPrompt(
   incidentId: string,
   triage: TriageResult,
   evidence: EvidenceBundle,
+  branch: string,
 ): Promise<string> {
   const template = await readFile(new URL("./prompt.md", import.meta.url), "utf8");
   const values: Record<string, string> = {
     incident_id: incidentId,
     service: evidence.service,
+    branch,
     root_cause: triage.root_cause,
     suspect_files: triage.suspect_files.map((file) => `- ${file}`).join("\n"),
     key_evidence: keyEvidence(triage, evidence),
@@ -284,6 +353,19 @@ function sampleLine(sample: EvidenceBundle["logs"]["samples"][number]): string {
   ]
     .filter((part) => part !== null && part.length > 0)
     .join(" ");
+}
+
+async function fixBuiltOnWrongBase(
+  pull: { owner: string; repo: string; number: number } | undefined,
+  suspectCommit: string,
+  prContainsCommit: NonNullable<FixDeps["prContainsCommit"]>,
+): Promise<boolean> {
+  if (!pull) return false;
+  try {
+    return !(await prContainsCommit(pull.owner, pull.repo, pull.number, suspectCommit));
+  } catch {
+    return true;
+  }
 }
 
 function pullRequest(result: RunResult): PullRequest | undefined {

@@ -1,7 +1,7 @@
 import type { TokenUsage } from "@cursor/sdk";
 import { maskBundle } from "../evidence/mask.js";
 import { formatCostLabel, formatTokens, isReportedCost } from "../fix/usage.js";
-import { ciVerificationSummary, type RecordedCheck } from "../verify/poll.js";
+import { checkLabel, ciVerificationSummary, latestChecks, type RecordedCheck } from "../verify/poll.js";
 
 export const blockedIssueRepo = "ccdaniele/paymas-checkout";
 
@@ -49,6 +49,7 @@ type ParsedReport = {
     duration_ms: number | null;
     cost_usd: number | null;
     usage: TokenUsage | null;
+    wrong_base: boolean;
   } | null;
   impact: {
     failed_requests: number;
@@ -133,6 +134,7 @@ function parseArtifacts(artifacts: IncidentArtifacts): ParsedReport {
           duration_ms: fix.duration_ms,
           cost_usd: fix.cost_usd,
           usage: fix.usage,
+          wrong_base: fix.wrong_base,
         }
       : null,
     impact: parseImpact(evidence),
@@ -229,6 +231,9 @@ function fixSection(fix: ParsedReport["fix"]): string[] {
     const tokens = formatTokens(fix.usage);
     if (tokens) lines.push(`- **Tokens:** ${tokens}`);
   }
+  if (fix.wrong_base) {
+    lines.push("The fix was built on the wrong base; needs human review.");
+  }
   return lines;
 }
 
@@ -243,34 +248,9 @@ function ciSection(verify: ParsedReport["verify"]): string[] {
   return lines;
 }
 
-function latestChecks(checks: RecordedCheck[]): RecordedCheck[] {
-  const latest = new Map<string, RecordedCheck>();
-  for (const check of checks) {
-    const name = checkLabel(check);
-    const previous = latest.get(name);
-    if (!previous || completedAtMs(check) >= completedAtMs(previous)) {
-      latest.set(name, check);
-    }
-  }
-  return [...latest.values()];
-}
-
 function ciCheckLine(check: RecordedCheck): string {
   const mark = check.conclusion === "success" ? "✓" : "✗";
   return `- ${mark} ${checkLabel(check)}`;
-}
-
-function checkLabel(check: RecordedCheck): string {
-  if (check.workflow && check.event) {
-    return `${check.workflow} / ${check.name} (${check.event})`;
-  }
-  return check.name;
-}
-
-function completedAtMs(check: RecordedCheck): number {
-  if (!check.completed_at) return 0;
-  const ms = Date.parse(check.completed_at);
-  return Number.isFinite(ms) ? ms : 0;
 }
 
 function impactSection(impact: ParsedReport["impact"]): string[] {
@@ -386,6 +366,7 @@ function parseFix(value: unknown): {
   cost_usd: number | null;
   usage: TokenUsage | null;
   pr_url: string | null;
+  wrong_base: boolean;
 } | null {
   const record = asRecord(value);
   if (!record) return null;
@@ -396,6 +377,7 @@ function parseFix(value: unknown): {
     cost_usd: numberField(record, "cost_usd"),
     usage: parseUsage(record.usage),
     pr_url: stringField(record, "pr_url") ?? null,
+    wrong_base: record.wrong_base === true,
   };
 }
 

@@ -1,5 +1,11 @@
 import { readIncidentJson, writeIncidentJson } from "../incidents/store.js";
-import { ciVerificationSummary, waitForCiChecks, type VerifyResult } from "./poll.js";
+import {
+  checkLabel,
+  ciVerificationSummary,
+  latestChecks,
+  waitForCiChecks,
+  type VerifyResult,
+} from "./poll.js";
 
 export async function runVerify(incidentId: string): Promise<void> {
   console.log(`[${incidentId}] verify: started`);
@@ -38,9 +44,9 @@ async function pullRequestFromFix(
 }
 
 function logVerify(incidentId: string, result: VerifyResult): void {
-  for (const check of result.checks) {
+  for (const check of latestChecks(result.checks)) {
     const mark = check.conclusion === "success" ? "✓" : "✗";
-    console.log(`[${incidentId}] verify: ${mark} ${check.name}`);
+    console.log(`[${incidentId}] verify: ${mark} ${checkLabel(check)}`);
   }
   const summary = ciVerificationSummary(result);
   if (summary) {
